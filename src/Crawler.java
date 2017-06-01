@@ -1,7 +1,4 @@
 import org.apache.commons.io.FileUtils;
-import org.joda.time.DateTime;
-import org.joda.time.Period;
-import org.joda.time.Seconds;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -9,15 +6,8 @@ import org.jsoup.select.Elements;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
-import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
-import java.util.Timer;
+import java.net.*;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -32,26 +22,41 @@ public class Crawler extends Thread {
     private String citingPapersURL = "";
     //Counts number of requests
     private int counter = 0;
-    private List<Observer> observers = new ArrayList<Observer>();
+    private List<Observer> observers = new ArrayList<>();
     private int pdfCounter;
     private String outputText = "";
     private Integer[] listOfTimes;
+    private ArrayList<String[]> listOfIPs;
+
     private Integer timeToWait;
 
-
+    Crawler() {
+        getProxys();
+    }
     void searchForArticle (String keyword, int no_of_results) throws IOException {
-
         //Replace space by + in the keyword as in the google search url
         keyword = keyword.replace(" ", "+");
         //Search google schoolar
         String url = "https://scholar.google.com/scholar?hl=en&q=" + keyword;
-        counter++;
-        System.out.println(url);
-        //Connect to the url and obain HTML response
         Document doc = null;
-        try {
+        boolean connected = false;
+        while (!connected) {
+            try {
+                doc = changeIP(url);
+                connected = true;
+            } catch (IOException e) {
+                System.out.println("Problem connecting");
+                setTextState("Failure. Connecting to a different proxy...", true);
+            }
+        }
 
-            doc = Jsoup.connect(url).userAgent("Mozilla").timeout(5000).get();
+
+
+
+        counter++;
+
+
+            //doc = Jsoup.connect(url).userAgent("Mozilla").timeout(5000).get();
             String text = "";
             String absLink = "";
             Elements links  = doc.select("a[href]");
@@ -68,9 +73,6 @@ public class Crawler extends Thread {
             System.out.println(text);
             System.out.println(absLink);
 
-        } catch (IOException e) {
-            throw new IOException("There was a problem connecting to Google Schoolar. Make sure that you have internet connection. ");
-        }
 
 
 
@@ -99,29 +101,95 @@ public class Crawler extends Thread {
 
     }
 
+    //Downloads pdf to directory
     void downloadPDF (String url) throws IOException {
         File docDestFile = new File("./comparison2/" + pdfCounter + ".pdf");
         System.out.println(url);
         URL urlObj = new URL(url);
         FileUtils.copyURLToFile(urlObj, docDestFile);
 
-       // InputStream in = urlObj.openStream();
-       // System.out.println(in);
-      //  Files.copy(in, Paths.get(String.valueOf(pdfCounter)+".pdf"), StandardCopyOption.REPLACE_EXISTING);
-      //  in.close();
-
     }
 
+    //Gets the number of papers that cite this title
     String getNumberOfCitations() {
         return numOfCitations;
     }
 
-    void changeIP() {
+    //Gets a random Ip to use as a proxy
+    Document changeIP(String url) throws IOException {
+        boolean connected = false;
+        Document doc = null;
+        while (!connected) {
+            System.out.println("Assigning ip");
+            String[] ipAndPort = listOfIPs.get(new Random().nextInt(listOfIPs.size()));
+            String ip = ipAndPort[0];
+            int port = Integer.valueOf(ipAndPort[1]);
 
+            try {
+                System.out.println("Trying to connect");
+                 doc =  Jsoup.connect(url).proxy(ip, port).userAgent("Mozilla").get();
+                connected = true;
+
+            } catch (Exception e) {
+                System.out.println(e.getMessage());
+            }
+        }
+
+
+//        setTextState("Trying to connect to proxy: "+ ip, false);
+//        URL urlObject = new URL(url);
+//        Proxy proxy = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(ip, port));
+//        HttpURLConnection uc = (HttpURLConnection)urlObject.openConnection(proxy);
+//        uc.connect();
+//        System.out.println("Connected!");
+//        String line;
+//        StringBuffer tmp = new StringBuffer();
+//        BufferedReader in = new BufferedReader(new InputStreamReader(uc.getInputStream()));
+//        while ((line = in.readLine()) != null) {
+//            tmp.append(line);
+//        }
+        return doc;
 
     }
 
-    void getProxys() {}
+    //Gets a list of all available proxys from a website
+    private void getProxys(){
+        listOfIPs = new ArrayList<>();
+        Document doc = null;
+        try {
+            doc = Jsoup.connect("http://www.us-proxy.org/").userAgent("Chrome").timeout(5000).get();
+        } catch (IOException e) {
+            setTextState("There was a problem accessing the Proxy Database, you will be connected using your own IP.", false);
+        }
+        Elements table  = doc.select("table");
+        Elements rows = table.select("tr");
+
+        Pattern ips = Pattern.compile("\\b(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\b");
+        for (int i = 1; i < rows.size(); i++) { //first row is the col names so skip it.
+            Element row = rows.get(i);
+            Elements cols = row.select("td");
+            boolean found = false;
+            String[] array = new String[2];
+            for (Element elt : cols) {
+                Matcher matcher = ips.matcher(elt.toString());
+                if (found) {
+                    //Get Port number
+                    String portNum = elt.toString();
+                    portNum = portNum.replaceAll("</?td>", "");
+                    array[1] = portNum;
+                    listOfIPs.add(array);
+                    array = new String[2];
+                    found = false;
+                }
+                if (matcher.find()) {
+                    //If an Ip is found, then the next element is the port number
+                    found = true;
+                    array[0] = matcher.group();
+                }
+            }
+        }
+        System.out.println(listOfIPs.size());
+    }
 
 
     public void getPDFs(int limit) throws Exception {
@@ -211,9 +279,6 @@ public class Crawler extends Thread {
         return timeToWait;
     }
 
-    String getUserAgent() {
-        return null;
-    }
 
 
 
