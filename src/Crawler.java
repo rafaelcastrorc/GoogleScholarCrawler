@@ -14,6 +14,7 @@ import java.util.regex.Pattern;
 
 /**
  * Created by rafaelcastro on 5/31/17.
+ * Crawler to gather data from Google Scholar
  */
 
 
@@ -21,65 +22,94 @@ public class Crawler extends Thread {
     private String numOfCitations = "";
     private String citingPapersURL = "";
     //Counts number of requests
-    private int counter = 0;
+    private int requestCounter = 0;
     private List<Observer> observers = new ArrayList<>();
     private int pdfCounter;
     private String outputText = "";
     private Integer[] listOfTimes;
     private ArrayList<String[]> listOfIPs;
-
+    private String[] ipAndPort;
     private Integer timeToWait;
 
-    Crawler() {
-        getProxys();
-    }
-    void searchForArticle (String keyword, int no_of_results) throws IOException {
+
+
+    /**
+     * Search for an article in Google Schoolar
+     * @param keyword String with the title of the document
+     * @param hasSearchBefore has the user press the button search before
+     * @throws IOException error while openning/connecting to the website
+     */
+    void searchForArticle(String keyword, boolean hasSearchBefore) throws IOException {
+        //If the list of ips has not been initialized, then call the method
+        if (listOfIPs == null) {
+            getProxys();
+        }
+        int invalidAttemps = 0;
         //Replace space by + in the keyword as in the google search url
         keyword = keyword.replace(" ", "+");
         //Search google schoolar
         String url = "https://scholar.google.com/scholar?hl=en&q=" + keyword;
-        Document doc = null;
-        boolean connected = false;
-        while (!connected) {
-            try {
-                doc = changeIP(url);
-                connected = true;
-            } catch (IOException e) {
-                System.out.println("Problem connecting");
-                setTextState("Failure. Connecting to a different proxy...", true);
+        boolean found = false;
+        while (!found) {
+            if (invalidAttemps >= 2) {
+                setTextState("Could not find paper, please try writing more specific information", false);
+                numOfCitations = "";
+                citingPapersURL = "";
+                found = true;
+            } else {
+                Document doc = null;
+                try {
+                     doc = changeIP(url, hasSearchBefore);
+                }catch (IOException e) {
+                    setTextState("There was a problem connecting to your previously used proxy.\nChanging to a different one", false);
+                    doc = changeIP(url, false);
+                }
+
+
+                if (doc.text().contains("Sorry, we can't verify that you're not a robot")) {
+                    //In case you been flagges as a bot even before searching
+                    setTextState("Google flagged your IP as a bot.\nChanging to a different one", false);
+                    doc = changeIP(url, false);
+
+                }
+
+                requestCounter++;
+                setTextState(String.valueOf("Number of requests: "+ requestCounter), false);
+
+
+                String text = "";
+                String absLink = "";
+                Elements links = doc.select("a[href]");
+                for (Element link : links) {
+                    text = link.text();
+                    absLink = link.attr("abs:href");
+
+                    if (text.contains("Cited by")) {
+                        found = true;
+                        break;
+                    }
+                }
+
+                numOfCitations = text;
+                citingPapersURL = absLink;
+                System.out.println(!doc.toString().contains("1 result"));
+                System.out.println(!doc.toString().contains("Showing the best result for this search"));
+
+                if (!doc.toString().contains("1 result") && !doc.toString().contains("Showing the best result for this search")) {
+                    setTextState("ERROR: There was more than 1 result found for your given query.\nPlease write the entire title and/or the authors", false);
+                    numOfCitations = "There was more than 1 result found for your given query";
+                }
+                invalidAttemps++;
             }
         }
 
 
-
-
-        counter++;
-
-
-            //doc = Jsoup.connect(url).userAgent("Mozilla").timeout(5000).get();
-            String text = "";
-            String absLink = "";
-            Elements links  = doc.select("a[href]");
-            for (Element link : links) {
-                text = link.text();
-                absLink = link.attr("abs:href");
-
-                if (text.contains("Cited by")) {
-                    break;
-                }
-            }
-            numOfCitations = text;
-            citingPapersURL = absLink;
-            System.out.println(text);
-            System.out.println(absLink);
-
-
-
-
-
     }
 
-    //Gets all the possible search results where the article is cited
+    /**
+     * Gets all the possible search results where the article is cited
+     * @return ArrayList with all the links
+     */
     private ArrayList<String> getAllLinks() {
         ArrayList<String> list = new ArrayList<>();
         Pattern pattern = Pattern.compile("=\\d*");
@@ -89,10 +119,11 @@ public class Crawler extends Thread {
             paperID = matcher.group();
             paperID = paperID.replace("=", "");
         }
+        //Add 1-10 results
         list.add(citingPapersURL);
-        for (int i = 10; i <1000 + 1; i = i + 10) {
+        for (int i = 10; i < 1000 + 1; i = i + 10) {
             StringBuilder sb = new StringBuilder();
-            sb.append("https://scholar.google.com/scholar?start=130&hl=en&oe=ASCII&as_sdt=5,39&sciodt=0,39&cites=").
+            sb.append("https://scholar.google.com/scholar?start=").append(i).append("&hl=en&oe=ASCII&as_sdt=5,39&sciodt=0,39&cites=").
                     append(paperID).append("&scipsc=");
             list.add(sb.toString());
 
@@ -101,67 +132,98 @@ public class Crawler extends Thread {
 
     }
 
-    //Downloads pdf to directory
-    void downloadPDF (String url) throws IOException {
-        File docDestFile = new File("./comparison2/" + pdfCounter + ".pdf");
-        System.out.println(url);
+    /**
+     * Download a pdf file to a directory
+     * @param url URL to download file from
+     * @throws IOException Unable to open link
+     */
+    private void downloadPDF(String url) throws IOException {
+        File docDestFile = new File("./DownloadedPDFs/" + pdfCounter + ".pdf");
         URL urlObj = new URL(url);
         FileUtils.copyURLToFile(urlObj, docDestFile);
 
     }
 
-    //Gets the number of papers that cite this title
+
+    /**
+     * Get number of papers that cite this article
+      * @return String
+     */
     String getNumberOfCitations() {
         return numOfCitations;
     }
 
-    //Gets a random Ip to use as a proxy
-    Document changeIP(String url) throws IOException {
+
+    /**
+     * Change current IP, or continue using the last working one
+     * @param url url that you are trying to connect
+     * @param hasSearchBefore has the user click the search button  befotr
+     * @return Document
+     * @throws IOException Unable to open file
+     */
+    Document changeIP(String url, boolean hasSearchBefore) throws IOException {
+        if (listOfIPs.isEmpty()) {
+            //If there was a problem connecting to the proxy database, connect always using your own IP while the session is on
+           Document d = null;
+            try {
+                 d = Jsoup.connect(url).userAgent("Mozilla").get();
+
+
+            } catch (IOException e) {
+                setTextState("Could not connect, please check your internet connection", false);
+            }
+            return d;
+        }
+        if (hasSearchBefore && requestCounter <= 100 && !numOfCitations.isEmpty()) {
+
+            //If has searched before and it worked, then use previous ip
+            return Jsoup.connect(url).proxy(ipAndPort[0], Integer.valueOf(ipAndPort[1])).userAgent("Mozilla").get();
+        }
+
+        //Reset request counter
+        requestCounter = 0;
+        setTextState(String.valueOf("Number of requests: "+ requestCounter), false);
         boolean connected = false;
         Document doc = null;
+        boolean thereWasAnError = false;
+        int attempt = 1;
         while (!connected) {
-            System.out.println("Assigning ip");
-            String[] ipAndPort = listOfIPs.get(new Random().nextInt(listOfIPs.size()));
+            ipAndPort = listOfIPs.get(new Random().nextInt(listOfIPs.size()));
             String ip = ipAndPort[0];
             int port = Integer.valueOf(ipAndPort[1]);
 
             try {
-                System.out.println("Trying to connect");
-                 doc =  Jsoup.connect(url).proxy(ip, port).userAgent("Mozilla").get();
+                if (thereWasAnError) {
+                    setTextState("Attempt "+attempt+ ": Failed to connect to Proxy, trying with a different one...", false);
+                    attempt++;
+                }
+                else {
+                    setTextState("Connecting to Proxy...", false);
+                }
+                doc = Jsoup.connect(url).proxy(ip, port).userAgent("Mozilla").get();
                 connected = true;
 
             } catch (Exception e) {
-                System.out.println(e.getMessage());
+                thereWasAnError = true;
             }
         }
 
-
-//        setTextState("Trying to connect to proxy: "+ ip, false);
-//        URL urlObject = new URL(url);
-//        Proxy proxy = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(ip, port));
-//        HttpURLConnection uc = (HttpURLConnection)urlObject.openConnection(proxy);
-//        uc.connect();
-//        System.out.println("Connected!");
-//        String line;
-//        StringBuffer tmp = new StringBuffer();
-//        BufferedReader in = new BufferedReader(new InputStreamReader(uc.getInputStream()));
-//        while ((line = in.readLine()) != null) {
-//            tmp.append(line);
-//        }
         return doc;
 
     }
 
     //Gets a list of all available proxys from a website
-    private void getProxys(){
+
+    /**
+     * Gets a list of proxys to use based on the website below.
+     */
+    void getProxys() {
         listOfIPs = new ArrayList<>();
         Document doc = null;
         try {
             doc = Jsoup.connect("http://www.us-proxy.org/").userAgent("Chrome").timeout(5000).get();
-        } catch (IOException e) {
-            setTextState("There was a problem accessing the Proxy Database, you will be connected using your own IP.", false);
-        }
-        Elements table  = doc.select("table");
+
+        Elements table = doc.select("table");
         Elements rows = table.select("tr");
 
         Pattern ips = Pattern.compile("\\b(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\b");
@@ -188,10 +250,17 @@ public class Crawler extends Thread {
                 }
             }
         }
-        System.out.println(listOfIPs.size());
+        } catch (IOException e) {
+            setTextState("There was a problem accessing the Proxy Database. \nWe will try to connect you using your own IP.", false);
+        }
     }
 
 
+    /**
+     * Downloads the number of pdf requested
+     * @param limit max number of pdfs to download
+     * @throws Exception Problem downloading or reading a file
+     */
     public void getPDFs(int limit) throws Exception {
 
         pdfCounter = 0;
@@ -205,32 +274,67 @@ public class Crawler extends Thread {
                 setTextState("All requested results have been found", false);
                 break;
             }
+            timeToWait = getTimeToWait();
+            setTextState("Waiting " + timeToWait+ " seconds before going to the search results", false);
             Thread.sleep(timeToWait * 1000);
-                //Increase counter for every new google link
-                counter++;
-                Document citingPapers = Jsoup.connect(currUrl).userAgent("Chrome").timeout(5000).get();
-                Elements linksInsidePaper = citingPapers.select("a[href]");
-                String text = "";
-                String absLink = "";
-                for (Element link : linksInsidePaper) {
-                    text = link.text();
-                    absLink = link.attr("abs:href");
-                    if (text.contains("PDF")) {
-                        pdfCounter++;
-                        setState(pdfCounter);
-                        downloadPDF(absLink);
-                        System.out.println(text);
-                        System.out.println(absLink);
-                        if (pdfCounter >= limit) {
-                            break;
-                        }
-                    }
+            setTextState("Downloading...", false);
 
+            //Increase counter for every new google link
+            Document citingPapers = null;
+            if (requestCounter >= 100) {
+                setTextState("Wait... Changing proxy because of amount of requests...", false);
+                citingPapers = changeIP(currUrl, false);
+            }
+            else {
+                try {
+
+                    citingPapers = changeIP(currUrl, true);
+                } catch (IOException e) {
+                    setTextState("There was a problem connecting to your previously used proxy.\nChanging to a different one", false);
+                    citingPapers = changeIP(currUrl, false);
+                }
+            }
+
+            if (citingPapers.text().contains("Sorry, we can't verify that you're not a robot")) {
+                //In case you been flagges as a bot even before searching
+                setTextState("Google flagged your IP as a bot.\nChanging to a different one", false);
+                citingPapers = changeIP(currUrl, false);
+
+            }
+
+            requestCounter++;
+
+            setTextState(String.valueOf("Number of requests: "+ requestCounter), false);
+            Elements linksInsidePaper = citingPapers.select("a[href]");
+            String text = "";
+            String absLink = "";
+            for (Element link : linksInsidePaper) {
+                text = link.text();
+                absLink = link.attr("abs:href");
+                if (text.contains("PDF")) {
+                    pdfCounter++;
+                    try {
+                    downloadPDF(absLink);
+                    } catch(IOException e2) {
+                        setTextState("This file could not be downloaded, skipping...", false);
+                        pdfCounter--;
+                    }
+                    setTextState("Downloaded: " +String.valueOf(pdfCounter),false);
+
+                    System.out.println(text);
+                    System.out.println(absLink);
+                    if (pdfCounter >= limit) {
+                        break;
+                    }
                 }
 
+            }
         }
     }
 
+    /**
+     * Notifies controller that data has chn
+     */
     protected void notifyAllObservers() {
         for (Observer observer : observers) {
             observer.update();
@@ -248,30 +352,29 @@ public class Crawler extends Thread {
     }
 
 
-     void attach(Observer observer) {
+    void attach(Observer observer) {
         observers.add(observer);
     }
 
-     void setTextState(String output, boolean sameLine) {
+    void setTextState(String output, boolean underPrevios) {
         StringBuilder sb = new StringBuilder();
-        if (sameLine == false) {
+        if (underPrevios) {
             sb.append(this.outputText).append("\n").append(output);
-        }
-        else sb.append(this.outputText).append(" ").append(output);
+        } else sb.append(output);
         outputText = sb.toString();
         notifyAllObservers();
     }
 
-     String getTextState() {
+    String getTextState() {
         return outputText;
     }
 
     //select time at random
-    int getTimeToWait(){
+    int getTimeToWait() {
         if (listOfTimes == null) {
-            listOfTimes = new Integer[10];
-            for (int i =0; i <listOfTimes.length; i++) {
-                listOfTimes[i] = i + 1;
+            listOfTimes = new Integer[5];
+            for (int i = 0; i < listOfTimes.length; i++) {
+                listOfTimes[i] = i + 2;
             }
         }
         int rnd = new Random().nextInt(listOfTimes.length);

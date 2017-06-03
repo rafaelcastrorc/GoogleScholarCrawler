@@ -1,31 +1,27 @@
 import javax.swing.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Created by rafaelcastro on 5/31/17.
+ * Displays the information
  */
 public class View {
-    private JButton Crawl;
     JPanel viewPanel;
-    private JLabel instructions;
     JTextField mainTextField;
     JFormattedTextField numberOfResults;
-    private JLabel instuctions2;
     JButton search;
-    private JTextArea outputTextField;
+    JTextArea outputTextField;
     JLabel resultText;
+    JLabel requestLabel;
     private JButton downloadButton;
     private JLabel downloadedLabel;
-    String title ="";
-    Crawler crawler;
 
 
-    View(Crawler crawler) {
-        this.crawler = crawler;
+    /**
+     * Constructor.
+     */
+    View() {
 
         mainTextField.addActionListener(new ActionListener() {
             @Override
@@ -40,31 +36,53 @@ public class View {
         });
     }
 
+    /**
+     * Display error as pop up message
+     *
+     * @param message String with error message
+     */
     void displayError(String message) {
         JOptionPane.showMessageDialog(null, message, "Error",
                 JOptionPane.ERROR_MESSAGE);
     }
 
-
-    public void displayMessage(String s) {
-    }
-
+    /**
+     * Adds a listener for the search button
+     *
+     * @param pressed ActionListener
+     */
     void addSearchListener(ActionListener pressed) {
         search.addActionListener(pressed);
     }
 
+    /**
+     * Adds a listener for the download button
+     *
+     * @param pressed ActionListener
+     */
     void addDownloadListener(ActionListener pressed) {
         downloadButton.addActionListener(pressed);
     }
 
 
-    void updateDownloadField(int numOfPDFs) {
+    /**
+     * Updates the download field tag to show the number of PDFs downloaded
+     *
+     * @param numOfPDFs String with the number of PDFs downloaded
+     */
+    void updateDownloadField(String numOfPDFs) {
         StringBuilder sb = new StringBuilder();
-        downloadedLabel.setText(sb.append("PDFs downloaded : ").append(numOfPDFs).toString());
+        downloadedLabel.setText(sb.append(numOfPDFs).toString());
 
     }
 
+    /**
+     * Updates the text area content
+     *
+     * @param outputText String with the text that wants to be displayed
+     */
     public void updateOutputTextField(String outputText) {
         outputTextField.setText(outputText);
     }
+
 }

@@ -3,7 +3,7 @@
   <grid id="27dc6" binding="viewPanel" layout-manager="GridLayoutManager" row-count="9" column-count="4" same-size-horizontally="false" same-size-vertically="false" hgap="-1" vgap="-1">
     <margin top="10" left="10" bottom="10" right="10"/>
     <constraints>
-      <xy x="20" y="20" width="617" height="400"/>
+      <xy x="20" y="20" width="540" height="400"/>
     </constraints>
     <properties>
       <font name="Helvetica Neue" size="14" style="0"/>
@@ -39,7 +39,7 @@
       </component>
       <component id="2748e" class="javax.swing.JLabel">
         <constraints>
-          <grid row="8" column="0" row-span="1" col-span="3" vsize-policy="0" hsize-policy="0" anchor="8" fill="0" indent="0" use-parent-layout="false"/>
+          <grid row="8" column="0" row-span="1" col-span="2" vsize-policy="0" hsize-policy="0" anchor="8" fill="0" indent="0" use-parent-layout="false"/>
         </constraints>
         <properties>
           <font name="Helvetica Neue" size="10"/>
@@ -112,6 +112,14 @@
         </constraints>
         <properties>
           <text value="Downloaded: 0"/>
+        </properties>
+      </component>
+      <component id="d9d2f" class="javax.swing.JLabel" binding="requestLabel">
+        <constraints>
+          <grid row="6" column="3" row-span="1" col-span="1" vsize-policy="0" hsize-policy="0" anchor="8" fill="0" indent="0" use-parent-layout="false"/>
+        </constraints>
+        <properties>
+          <text value="Number of requests: "/>
         </properties>
       </component>
     </children>
