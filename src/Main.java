@@ -12,7 +12,7 @@ public class Main {
         View view = new View();
 
         //Sets everything for the GUI to show
-        JFrame frame = new JFrame("View");
+        JFrame frame = new JFrame("Crawler");
         frame.setContentPane(view.viewPanel);
         frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
         frame.pack();
